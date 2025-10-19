@@ -116,46 +116,60 @@ window.addEventListener("keyup", e => {
   if (e.code === "Space") stopFiring();
 });
 
-// --- Input (mobile) ---
+// --- Mobile touch input (Option B: restricted zones) ---
+const UI_ZONES = [
+  { x: HEALTH_BAR_MARGIN, y: HEALTH_BAR_MARGIN, width: 135, height: HEALTH_BAR_HEIGHT }, // health bar
+  { x: GAME_WIDTH - ship.width, y: 0, width: ship.width, height: ship.height } // pause button
+];
+
 canvas.addEventListener("touchstart", handleTouchStart);
 canvas.addEventListener("touchmove", handleTouchMove);
 canvas.addEventListener("touchend", handleTouchEnd);
 
+function isInRestrictedZone(x, y) {
+  return UI_ZONES.some(zone =>
+    x >= zone.x &&
+    x <= zone.x + zone.width &&
+    y >= zone.y &&
+    y <= zone.y + zone.height
+  );
+}
+
 function handleTouchStart(e) {
   if (gameOver || shipExploding || paused) return;
   e.preventDefault();
+
   const touch = e.touches[0];
   const rect = canvas.getBoundingClientRect();
   const scale = canvas.width / rect.width;
   const x = (touch.clientX - rect.left) * scale;
   const y = (touch.clientY - rect.top) * scale;
 
-  if (
-    x >= ship.x &&
-    x <= ship.x + ship.width &&
-    y >= ship.y &&
-    y <= ship.y + ship.height
-  ) {
-    startFiring();
-  }
+  if (!isInRestrictedZone(x, y)) startFiring();
 }
 
 function handleTouchMove(e) {
   if (gameOver || shipExploding || paused) return;
   e.preventDefault();
+
   const touch = e.touches[0];
   const rect = canvas.getBoundingClientRect();
   const scale = canvas.width / rect.width;
+  const x = (touch.clientX - rect.left) * scale;
   const y = (touch.clientY - rect.top) * scale;
 
-  ship.y = y - ship.height / 2;
-  ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
+  // Only move ship if not touching restricted zones
+  if (!isInRestrictedZone(x, y)) {
+    ship.y = y - ship.height / 2;
+    ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
+  }
 }
 
 function handleTouchEnd(e) {
   e.preventDefault();
   stopFiring();
 }
+
 
 // --- Firing logic ---
 function startFiring() {
