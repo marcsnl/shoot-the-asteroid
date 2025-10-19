@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shoot The Asteroid</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div id="rotate-prompt">Please rotate your device</div>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Pause Modal -->
+  <div id="pauseModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">Game Paused</div>
+      <div class="modal-body">Press <strong>ESC</strong> to resume or wait here safely.</div>
+      <div class="modal-actions">
+        <button id="resumeBtn">Resume</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
