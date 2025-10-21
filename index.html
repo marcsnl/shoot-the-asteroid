@@ -9,6 +9,7 @@
 
 <body>
 
+  <!-- Horizontal Screen Prompt -->
   <div id="rotate-prompt">Please rotate your device</div>
   <canvas id="gameCanvas"></canvas>
 
@@ -19,19 +20,43 @@
 
   <!-- Main Menu -->
   <div id="mainMenu">
-    <button id="playBtn">Play</button>
-    <button id="settingsBtn">Settings</button>
-    <button id="guideBtn">Guide</button>
+    <button id="playBtn">PLAY</button>
+    <button id="settingsBtn">SETTINGS</button>
+    <button id="guideBtn">GUIDE</button>
+    <button id="replayStoryBtn">REPLAY STORY</button>
+  </div>
+
+  <!-- Story Scene -->
+  <div id="storyOverlay">
+    <div id="storyContainer">
+      <img src="assets/briefing-scene.png" alt="briefing background">
+      <div class="dialogue-box">
+        <p id="storyText"></p>
+        <div id="storyControls">
+          <button id="skipStoryBtn">SKIP</button>
+          <button id="nextStoryBtn">NEXT</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Pause Modal -->
   <div id="pauseModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">Game Paused</div>
-      <div class="modal-body">Press <strong>ESC</strong> to resume or wait here safely.</div>
+      <h2>GAME PAUSED</h2>
+      <div class="modal-body">Press <strong>Resume</strong> to continue.</div>
       <div class="modal-actions">
-        <button id="resumeBtn">Resume</button>
+        <button id="resumeBtn">RESUME</button>
+        <button id="exitBtn">EXIT</button>
       </div>
+  </div>
+
+  <!-- End Mission Modal -->
+  <div id="missionEndModal">
+    <h2>DRONE CONNECTION LOST</h2>
+    <p>Connect to another drone?</p>
+    <div class="mission-end-modal-actions">
+      <button id="playAgainBtn">PLAY AGAIN</button>
+      <button id="exitMissionBtn">EXIT</button>
     </div>
   </div>
 
