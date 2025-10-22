@@ -1,4 +1,20 @@
 /* -------- Main Style -------- */
+
+/* Disable all text selection */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Disable image dragging/selection */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -17,6 +33,7 @@ html, body {
 
 /* Rotate warning */
 #rotate-prompt {
+  margin-left: 15px;
   position: fixed;
   inset: 0;
   display: flex;
@@ -34,11 +51,16 @@ html, body {
 #splashScreen {
   position: fixed;
   inset: 0;
-  display: flex;
+  display: none; /* Add this line */
   align-items: center;
   justify-content: center;
   background: black;
   z-index: 100;
+  transition: opacity 0.5s;
+}
+#splashScreen.fadeOut {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #splashScreen img {
@@ -60,6 +82,14 @@ html, body {
   gap: 10px;
 }
 
+#mainMenuGameTitle {
+  display: block;
+  width: 60%;               
+  max-width: 480px;     
+  height: auto;          
+  margin-bottom: 24px;     
+}
+
 #mainMenu button {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.9);
@@ -73,16 +103,17 @@ html, body {
   font-size: 13px;
 }
 
+.main-menu-button-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 10px; /* spacing between buttons */
+  text-align: center;
+}
+
 #replayStoryBtn {
   display: none;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: transparent;
-  color: white;
-  border: 1px solid rgba(255,255,255,0.9);
-  border-radius: 6px;
-  font-family: monospace;
-  cursor: pointer;
 }
 
 /* -------- Story Overlay -------- */
@@ -126,7 +157,7 @@ html, body {
   flex-direction: column;
   justify-content: space-between;
   position: absolute;
-  left: 50%;
+  left: 36%;
   transform: translateX(-50%);
   bottom: 5%;
   width: 92%;
@@ -216,4 +247,48 @@ html, body {
 
 #resumeBtn, #exitBtn {
   margin-right: 8px;
+}
+
+/* -------- Responsive Layout -------- */
+@media (orientation: portrait) {
+  .main-menu-button-container {
+    flex-direction: column;
+    gap: 12px; /* slightly more vertical space */
+  }
+
+  #mainMenu {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #mainMenuGameTitle {
+    width: 75%;
+    max-width: 320px;
+    margin-bottom: 16px;
+  }
+
+  #storyContainer {
+    width: 90%;
+    height: 80vh;
+    aspect-ratio: auto;
+    flex-direction: column;
+  }
+  #storyContainer img {
+    position: relative;
+    width: 100%;
+    height: 50%; /* adjust the height to fit the image */
+    object-fit: coverHeight;
+    border-radius: 6px 6px 0 0;
+  }
+  .dialogue-box {
+    position: relative;
+    margin-top: 45px;
+    width: 100%;
+    height: 10%; /* adjust the height to fit the dialogue box */
+    left: 0;
+    transform: none;
+    border-radius: 8px;
+  }
+
 }
