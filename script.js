@@ -30,6 +30,7 @@ const asteroidV1 = new Image(); asteroidV1.src = "assets/asteroid-medium-v1.png"
 const asteroidV2 = new Image(); asteroidV2.src = "assets/asteroid-medium-v2.png";
 const asteroidLargeImg = new Image(); asteroidLargeImg.src = "assets/asteroid-large.png";
 const briefingImage = new Image(); briefingImage.src = "assets/briefing-scene.png"; // story background
+const pauseButtonImg = new Image(); pauseButtonImg.src = "assets/pause-button.png";
 
 const asteroidDestroyFrames = [
   "assets/asteroid-medium-destroyed-s1.png",
@@ -76,10 +77,19 @@ let shipExploding = false;
 let explosionFrame = 0;
 let explosionTimer = 0;
 let explosionDone = false;
+let nextFireTime = 0;
 let animId = null;
 const HEALTH_BAR_HEIGHT = 40;
 const HEALTH_BAR_MARGIN = 8;
 const TOP_BOUNDARY = HEALTH_BAR_MARGIN + HEALTH_BAR_HEIGHT + 4;
+const PAUSE_BUTTON_SIZE = 32; // Adjust if needed
+const PAUSE_BUTTON_MARGIN = 10;
+const pauseButton = {
+  x: GAME_WIDTH - PAUSE_BUTTON_SIZE - PAUSE_BUTTON_MARGIN,
+  y: HEALTH_BAR_MARGIN, // same height level as bars
+  width: PAUSE_BUTTON_SIZE,
+  height: PAUSE_BUTTON_SIZE
+};
 
 const ship = {
   x: 60, y: GAME_HEIGHT / 2 - 16, width: 32, height: 32, speed: 2.5,
@@ -101,6 +111,8 @@ let inputsSetup = false; // to avoid attaching duplicate input handlers
 let asteroidSpawnTimeout = null;
 let powerUpTimeout = null;
 let gameStartTime = null;
+let totalPausedTime = 0;
+let pauseStartTime = null;
 
 // progression config
 const ASTEROID_CAP = 70; // maximum asteroids present at once
@@ -266,7 +278,9 @@ function togglePause(force = null) {
     asteroidSpawnTimeout = null;
     if (powerUpTimeout) clearTimeout(powerUpTimeout);
     powerUpTimeout = null;
+    pauseStartTime = Date.now();  // NEW: Record pause start
   } else if (!newState && paused) {
+    totalPausedTime += Date.now() - pauseStartTime;  // NEW: Accumulate paused time
     paused = false;
     pauseModal.style.display = "none";
     resumeAllAudio();
@@ -372,15 +386,34 @@ function setupInput() {
     { x: GAME_WIDTH - ship.width, y: 0, width: ship.width, height: ship.height }
   ];
   canvas.addEventListener("touchstart", e => {
-    if (gameOver || shipExploding || paused) return;
+    if (gameOver || shipExploding) return;
     e.preventDefault();
+
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const x = (touch.clientX - rect.left) * scale;
     const y = (touch.clientY - rect.top) * scale;
-    if (!UI_ZONES.some(z => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)) startFiring();
+
+    // --- check if tapped pause button ---
+    if (
+      inGame &&
+      !gameOver &&
+      x >= pauseButton.x &&
+      x <= pauseButton.x + pauseButton.width &&
+      y >= pauseButton.y &&
+      y <= pauseButton.y + pauseButton.height
+    ) {
+      togglePause(!paused); // toggle on tap
+      return; // stop here — don’t start firing
+    }
+
+    // --- normal firing control ---
+    if (paused) return;
+    if (!UI_ZONES.some(z => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height))
+      startFiring();
   });
+
   canvas.addEventListener("touchmove", e => {
     if (gameOver || shipExploding || paused) return;
     e.preventDefault();
@@ -392,48 +425,53 @@ function setupInput() {
     ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
   });
   canvas.addEventListener("touchend", e => { e.preventDefault(); stopFiring(); });
+
+  canvas.addEventListener("mousedown", e => {
+    if (!inGame || gameOver) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    const x = (e.clientX - rect.left) * scale;
+    const y = (e.clientY - rect.top) * scale;
+
+    // check if clicked pause button
+    if (
+      x >= pauseButton.x &&
+      x <= pauseButton.x + pauseButton.width &&
+      y >= pauseButton.y &&
+      y <= pauseButton.y + pauseButton.height
+    ) {
+      togglePause(true);
+      return;
+    }
+  });
+
 }
 
 // --- Firing logic ---
 function startFiring() {
   if (ship.firing) return;
   ship.firing = true;
-  fireBullet();
-  updateFireInterval();
+  fireBullet(); // Immediate fire on press (if cooldown allows)
 }
 function stopFiring() {
   ship.firing = false;
-  if (ship.fireIntervalId) {
-    clearInterval(ship.fireIntervalId);
-    ship.fireIntervalId = null;
-  }
 }
-function updateFireInterval() {
-  // Clear existing interval
-  if (ship.fireIntervalId) {
-    clearInterval(ship.fireIntervalId);
-    ship.fireIntervalId = null;
-  }
-  const intervalMs = Math.max(1000 / ship.fireRate, 1000 / FIRE_RATE_CAP); // ensure reasonable
-  ship.fireIntervalId = setInterval(() => {
-    if (!ship.firing) return;
-    fireBullet();
-  }, intervalMs);
-}
+
 function fireBullet() {
+  const now = Date.now();
+  if (now < nextFireTime) return;
   bullets.push({ x: ship.x + ship.width - 4, y: ship.y + ship.height / 2 - 2, width: 8, height: 4, speed: 6 });
+  nextFireTime = now + 1000 / ship.fireRate;
 }
 
 // --- Asteroids & progression scheduler ---
 // Use a scheduled timeout pattern so spawn delay can change with progression
 function computeAsteroidDelay() {
   if (!gameStartTime) return 1200;
-  const elapsed = (Date.now() - gameStartTime) / 1000; // in seconds
-
+  const elapsed = (Date.now() - gameStartTime - totalPausedTime) / 1000;  // MODIFIED: Subtract paused time
   // Continuous decay: gradually shortens spawn delay over time
   // Starts at 1200ms, approaches 250ms asymptotically
   const delay = 250 + 950 * Math.exp(-elapsed / 120);
-
   return Math.max(250, delay); // never faster than 4 per second
 }
 
@@ -450,7 +488,7 @@ function scheduleNextAsteroid() {
 function spawnAsteroid() {
   if (gameOver || shipExploding || paused) return;
 
-  const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+  const elapsed = Math.floor((Date.now() - gameStartTime - totalPausedTime) / 1000);  // MODIFIED: Subtract paused time
   const stage = Math.floor(elapsed / STAGE_SECONDS) + 1;
 
   // decide whether to spawn a large asteroid based on stage and probability
@@ -569,6 +607,10 @@ function update() {
   if (ship.movingDown) ship.y += ship.speed;
   ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
 
+  if (ship.firing) {
+    fireBullet();
+  }
+
   bullets.forEach(b => b.x += b.speed);
   bullets = bullets.filter(b => b.x < GAME_WIDTH + 40);
 
@@ -642,8 +684,10 @@ function triggerShipExplosion() {
 function collectPowerUp(p) {
   if (p.type === "firerate") {
     ship.fireRate = Math.min(ship.fireRate + 1, FIRE_RATE_CAP);
+    // Allow immediate fire after upgrade if cooldown was limiting
+    nextFireTime = Math.min(nextFireTime, Date.now());
     // if currently firing, refresh the interval
-    if (ship.firing) updateFireInterval();
+   
   } else if (p.type === "health") {
     ship.health = Math.min(ship.health + 1, HEALTH_CAP);
   }
@@ -707,6 +751,17 @@ function draw() {
     HEALTH_BAR_HEIGHT
   );
 
+  // draw pause button (only during gameplay)
+  if (inGame && !gameOver) {
+    ctx.drawImage(
+      pauseButtonImg,
+      pauseButton.x,
+      pauseButton.y,
+      pauseButton.width,
+      pauseButton.height
+    );
+  }
+
 }
 
 // --- Main loop ---
@@ -760,11 +815,9 @@ function startGame() {
   ship.movingDown = false;
   ship.firing = false;
   ship.fireRate = 1;
+  nextFireTime = 0;
 
-  if (ship.fireIntervalId) {
-    clearInterval(ship.fireIntervalId);
-    ship.fireIntervalId = null;
-  }
+
 
   if (mainMenu) mainMenu.style.display = "none";
   missionEndModal.style.display = "none";
@@ -775,6 +828,8 @@ function startGame() {
   setupInput();
 
   gameStartTime = Date.now();
+  totalPausedTime = 0;
+  pauseStartTime = null;
 
   // schedule first asteroid & powerup spawns
   scheduleNextAsteroid();
