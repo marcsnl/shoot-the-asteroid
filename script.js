@@ -82,13 +82,13 @@ let animId = null;
 const HEALTH_BAR_HEIGHT = 40;
 const HEALTH_BAR_MARGIN = 8;
 const TOP_BOUNDARY = HEALTH_BAR_MARGIN + HEALTH_BAR_HEIGHT + 4;
-const PAUSE_BUTTON_SIZE = 32; // Adjust if needed
-const PAUSE_BUTTON_MARGIN = 10;
-const pauseButton = {
-  x: GAME_WIDTH - PAUSE_BUTTON_SIZE - PAUSE_BUTTON_MARGIN,
-  y: HEALTH_BAR_MARGIN, // same height level as bars
-  width: PAUSE_BUTTON_SIZE,
-  height: PAUSE_BUTTON_SIZE
+const PAUSE_BTN_SIZE = 40;  // Scaled size for drawing (matches health bar height; adjust as needed)
+const PAUSE_BTN_MARGIN = HEALTH_BAR_MARGIN;  // Reuse for consistency
+const pauseBtnZone = {
+  x: GAME_WIDTH - PAUSE_BTN_SIZE - PAUSE_BTN_MARGIN,
+  y: PAUSE_BTN_MARGIN,
+  width: PAUSE_BTN_SIZE,
+  height: PAUSE_BTN_SIZE
 };
 
 const ship = {
@@ -104,15 +104,14 @@ let powerUps = [];
 let paused = false;
 let inGame = false; // track when gameplay is active
 let gameAudioElements = [];
-
+let totalPausedTime = 0;
+let pauseStartTime = null;
 let inputsSetup = false; // to avoid attaching duplicate input handlers
 
 // Spawner/timer handles
 let asteroidSpawnTimeout = null;
 let powerUpTimeout = null;
 let gameStartTime = null;
-let totalPausedTime = 0;
-let pauseStartTime = null;
 
 // progression config
 const ASTEROID_CAP = 70; // maximum asteroids present at once
@@ -234,6 +233,10 @@ function markStoryPlayedAndRevealReplay() {
   storyShownThisInstall = false;
 }
 
+function getEffectiveElapsed() {
+  return (Date.now() - gameStartTime - totalPausedTime) / 1000;
+}
+
 // --- Helpers ---
 function checkCollision(a, b) {
   return a.x < b.x + b.width &&
@@ -270,17 +273,20 @@ resizeCanvas();
 function togglePause(force = null) {
   const newState = force !== null ? force : !paused;
   if (newState && !paused) {
-    paused = true;
-    pauseModal.style.display = "flex";
-    stopAllAudio();
-    // Stop spawning while paused
-    if (asteroidSpawnTimeout) clearTimeout(asteroidSpawnTimeout);
-    asteroidSpawnTimeout = null;
-    if (powerUpTimeout) clearTimeout(powerUpTimeout);
-    powerUpTimeout = null;
-    pauseStartTime = Date.now();  // NEW: Record pause start
-  } else if (!newState && paused) {
-    totalPausedTime += Date.now() - pauseStartTime;  // NEW: Accumulate paused time
+  paused = true;
+  pauseModal.style.display = "flex";
+  stopAllAudio();
+  // Stop spawning while paused
+  if (asteroidSpawnTimeout) clearTimeout(asteroidSpawnTimeout);
+  asteroidSpawnTimeout = null;
+  if (powerUpTimeout) clearTimeout(powerUpTimeout);
+  powerUpTimeout = null;
+  pauseStartTime = Date.now();  // NEW: Start tracking pause duration
+} else if (!newState && paused) {
+    if (pauseStartTime !== null) {  // NEW: Accumulate paused time
+      totalPausedTime += Date.now() - pauseStartTime;
+      pauseStartTime = null;
+    }
     paused = false;
     pauseModal.style.display = "none";
     resumeAllAudio();
@@ -339,6 +345,10 @@ function exitToMainMenu() {
   pauseModal.style.display = "none";
   if (mainMenu) mainMenu.style.display = "flex";
   stopAllAudio();
+  if (pauseStartTime !== null) {
+    totalPausedTime += Date.now() - pauseStartTime;
+    pauseStartTime = null;
+  }
 }
 
 resumeBtn.addEventListener("click", () => togglePause(false));
@@ -383,37 +393,26 @@ function setupInput() {
   // Touch
   const UI_ZONES = [
     { x: HEALTH_BAR_MARGIN, y: HEALTH_BAR_MARGIN, width: 135, height: HEALTH_BAR_HEIGHT },
-    { x: GAME_WIDTH - ship.width, y: 0, width: ship.width, height: ship.height }
+    { x: GAME_WIDTH - ship.width, y: 0, width: ship.width, height: ship.height },
+    pauseBtnZone
   ];
   canvas.addEventListener("touchstart", e => {
-    if (gameOver || shipExploding) return;
+    if (gameOver || shipExploding || paused) return;
     e.preventDefault();
-
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const x = (touch.clientX - rect.left) * scale;
     const y = (touch.clientY - rect.top) * scale;
-
-    // --- check if tapped pause button ---
-    if (
-      inGame &&
-      !gameOver &&
-      x >= pauseButton.x &&
-      x <= pauseButton.x + pauseButton.width &&
-      y >= pauseButton.y &&
-      y <= pauseButton.y + pauseButton.height
-    ) {
-      togglePause(!paused); // toggle on tap
-      return; // stop here — don’t start firing
+    // NEW: Check if touch is on pause button
+    if (inGame && !paused && !gameOver && !shipExploding &&
+        x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
+        y >= pauseBtnZone.y && y <= pauseBtnZone.y + pauseBtnZone.height) {
+      togglePause(true);  // Pause the game
+      return;  // Prevent firing or other actions
     }
-
-    // --- normal firing control ---
-    if (paused) return;
-    if (!UI_ZONES.some(z => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height))
-      startFiring();
+    if (!UI_ZONES.some(z => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)) startFiring();
   });
-
   canvas.addEventListener("touchmove", e => {
     if (gameOver || shipExploding || paused) return;
     e.preventDefault();
@@ -425,26 +424,21 @@ function setupInput() {
     ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
   });
   canvas.addEventListener("touchend", e => { e.preventDefault(); stopFiring(); });
-
+  // NEW: Mouse click support for pause button on desktop
   canvas.addEventListener("mousedown", e => {
-    if (!inGame || gameOver) return;
+    if (!inGame || paused || gameOver || shipExploding) return;
+    e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const scale = canvas.width / rect.width;
     const x = (e.clientX - rect.left) * scale;
     const y = (e.clientY - rect.top) * scale;
 
-    // check if clicked pause button
-    if (
-      x >= pauseButton.x &&
-      x <= pauseButton.x + pauseButton.width &&
-      y >= pauseButton.y &&
-      y <= pauseButton.y + pauseButton.height
-    ) {
-      togglePause(true);
-      return;
+    // Check if click is on pause button
+    if (x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
+        y >= pauseBtnZone.y && y <= pauseBtnZone.y + pauseBtnZone.height) {
+      togglePause(true);  // Pause the game
     }
   });
-
 }
 
 // --- Firing logic ---
@@ -468,7 +462,7 @@ function fireBullet() {
 // Use a scheduled timeout pattern so spawn delay can change with progression
 function computeAsteroidDelay() {
   if (!gameStartTime) return 1200;
-  const elapsed = (Date.now() - gameStartTime - totalPausedTime) / 1000;  // MODIFIED: Subtract paused time
+  const elapsed = getEffectiveElapsed();  // CHANGED: Use effective elapsed
   // Continuous decay: gradually shortens spawn delay over time
   // Starts at 1200ms, approaches 250ms asymptotically
   const delay = 250 + 950 * Math.exp(-elapsed / 120);
@@ -487,8 +481,7 @@ function scheduleNextAsteroid() {
 
 function spawnAsteroid() {
   if (gameOver || shipExploding || paused) return;
-
-  const elapsed = Math.floor((Date.now() - gameStartTime - totalPausedTime) / 1000);  // MODIFIED: Subtract paused time
+  const elapsed = Math.floor(getEffectiveElapsed());  // CHANGED: Use effective elapsed
   const stage = Math.floor(elapsed / STAGE_SECONDS) + 1;
 
   // decide whether to spawn a large asteroid based on stage and probability
@@ -751,16 +744,8 @@ function draw() {
     HEALTH_BAR_HEIGHT
   );
 
-  // draw pause button (only during gameplay)
-  if (inGame && !gameOver) {
-    ctx.drawImage(
-      pauseButtonImg,
-      pauseButton.x,
-      pauseButton.y,
-      pauseButton.width,
-      pauseButton.height
-    );
-  }
+  // NEW: Draw pause button (only during active gameplay)
+  ctx.drawImage(pauseButtonImg, pauseBtnZone.x, pauseBtnZone.y, pauseBtnZone.width, pauseBtnZone.height);
 
 }
 
@@ -828,6 +813,7 @@ function startGame() {
   setupInput();
 
   gameStartTime = Date.now();
+
   totalPausedTime = 0;
   pauseStartTime = null;
 
@@ -880,7 +866,7 @@ setupMenuButtons();
 const allImages = [
   bgImage, shipImage, laserImage, asteroidV1, asteroidV2, asteroidLargeImg, briefingImage,
   ...asteroidDestroyFrames, ...asteroidLargeDestroyFrames, ...healthBars, ...shipExplosionFrames,
-  powerupFireImg, powerupHealthImg
+  powerupFireImg, powerupHealthImg, pauseButtonImg
 ];
 let loaded = 0;
 allImages.forEach(img => {
