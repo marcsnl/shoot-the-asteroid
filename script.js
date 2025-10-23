@@ -401,9 +401,10 @@ function setupInput() {
     e.preventDefault();
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    const x = (touch.clientX - rect.left) * scale;
-    const y = (touch.clientY - rect.top) * scale;
+    const scaleX = GAME_WIDTH / rect.width;  // FIXED: Use logical width for correct scaling
+    const scaleY = GAME_HEIGHT / rect.height;  // FIXED: Same for height
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
     // NEW: Check if touch is on pause button
     if (inGame && !paused && !gameOver && !shipExploding &&
         x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
@@ -418,20 +419,22 @@ function setupInput() {
     e.preventDefault();
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    const y = (touch.clientY - rect.top) * scale;
+    const scaleY = GAME_HEIGHT / rect.height;  // FIXED: Use logical height for correct scaling
+    const y = (touch.clientY - rect.top) * scaleY;
     ship.y = y - ship.height / 2;
     ship.y = Math.max(TOP_BOUNDARY, Math.min(GAME_HEIGHT - ship.height, ship.y));
   });
   canvas.addEventListener("touchend", e => { e.preventDefault(); stopFiring(); });
   // NEW: Mouse click support for pause button on desktop
-  canvas.addEventListener("mousedown", e => {
+  // UPDATED: Use "click" instead of "mousedown" for better button-like behavior on desktop
+  canvas.addEventListener("click", e => {
     if (!inGame || paused || gameOver || shipExploding) return;
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / rect.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
+    const scaleX = GAME_WIDTH / rect.width;  // FIXED: Use logical width for correct scaling
+    const scaleY = GAME_HEIGHT / rect.height;  // FIXED: Same for height
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     // Check if click is on pause button
     if (x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
