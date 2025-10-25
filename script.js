@@ -442,6 +442,23 @@ function setupInput() {
       togglePause(true);  // Pause the game
     }
   });
+  canvas.addEventListener("mousemove", e => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = GAME_WIDTH / rect.width;
+  const scaleY = GAME_HEIGHT / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+
+  // Check if hovering over the pause button
+  if (
+    x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
+    y >= pauseBtnZone.y && y <= pauseBtnZone.y + pauseBtnZone.height
+  ) {
+    canvas.style.cursor = "pointer"; // 👈 changes to hand cursor
+  } else {
+    canvas.style.cursor = "default";
+  }
+});
 }
 
 // --- Firing logic ---
