@@ -90,6 +90,10 @@ html, body {
   margin-bottom: 24px;     
 }
 
+#mainMenu p{
+  color: white;
+}
+
 #mainMenu button {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.9);
@@ -290,5 +294,6 @@ html, body {
     transform: none;
     border-radius: 8px;
   }
+
 
 }
