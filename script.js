@@ -176,6 +176,58 @@ sfx.shipBullet.volume = 1.0;
 sfx.asteroidMediumDestruction.volume = 1.0;
 sfx.asteroidLargeDestruction.volume = 1.0;
 
+// --------------------
+// Audio pool factory
+// --------------------
+// Create a pool of Audio objects for a given src to avoid cloneNode overhead
+function createAudioPool(src, size = 5) {
+  const pool = [];
+  for (let i = 0; i < size; i++) {
+    const a = new Audio(src);
+    a.preload = "auto";
+    // small safety: catch play errors silently (autoplay policies)
+    a.addEventListener("error", () => {});
+    pool.push(a);
+  }
+  let idx = 0;
+  return {
+    play(resetTime = true, volume = 1.0) {
+      try {
+        const audio = pool[idx];
+        if (!audio) return;
+        if (resetTime) audio.currentTime = 0;
+        audio.volume = volume;
+        // attempt play, ignore promise rejection (autoplay policy)
+        audio.play().catch(() => {});
+        idx = (idx + 1) % pool.length;
+      } catch (e) {
+        // fallback: try to use a fresh element if pool fails
+        const fallback = new Audio(src);
+        fallback.currentTime = 0;
+        fallback.volume = volume;
+        fallback.play().catch(()=>{});
+      }
+    },
+    // optional: stop all (useful for pause)
+    pauseAll() {
+      pool.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(_){} });
+    }
+  };
+}
+
+// Bullet SFX pool — tuned for rapid fire
+const bulletSfxPool = createAudioPool("assets/ship-bullet-sfx.mp3", 6);
+
+// Optional: set base volume for bullet pool based on saved SFX volume
+function playBulletSfx() {
+  const savedVol = getValidVolume("sfxVolume", 1.0);
+  const savedMute = localStorage.getItem("sfxMuted") === "true";
+  if (savedMute || savedVol <= 0) return;
+  // play via pool with the saved volume
+  bulletSfxPool.play(true, savedVol);
+}
+
+
 // Make all tracks loop and prepare for pause/resume control
 for (const key in musicTracks) {
     const track = musicTracks[key];
@@ -197,6 +249,7 @@ function getValidVolume(key, defaultVol = 1.0) {
 }
 
 function playMusic(type) {
+  stopAllAudio(); 
   const newTrack = musicTracks[type];
   if (!newTrack) return;
 
@@ -790,7 +843,7 @@ function fireBullet() {
   const now = Date.now();
   if (now < nextFireTime) return;
   bullets.push({ x: ship.x + ship.width - 4, y: ship.y + ship.height / 2 - 2, width: 8, height: 4, speed: 6 });
-  playSfx(sfx.shipBullet);
+  playBulletSfx();
   nextFireTime = now + 1000 / ship.fireRate;
 }
 
@@ -1544,5 +1597,6 @@ allImages.forEach(img => {
     }, 20);
   }
 });
+
 
 setupGlobalAudioHandlers();
