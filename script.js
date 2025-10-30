@@ -3,6 +3,8 @@ const GAME_WIDTH = 540;
 const GAME_HEIGHT = 270;
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+canvas.width = GAME_WIDTH;
+canvas.height = GAME_HEIGHT;
 const rotatePrompt = document.getElementById("rotate-prompt");
 
 // --- Splash & Main Menu Elements ---
@@ -21,6 +23,9 @@ const exitBtn = document.getElementById("exitBtn");
 const missionEndModal = document.getElementById("missionEndModal");
 const playAgainBtn = document.getElementById("playAgainBtn");
 const exitMissionBtn = document.getElementById("exitMissionBtn");
+const finalScoreText = document.getElementById("finalScoreText");
+const highScoreText = document.getElementById("highScoreText");
+const newHighScoreMsg = document.getElementById("newHighScoreMsg");
 
 // --- Load images ---
 const bgImage = new Image(); bgImage.src = "assets/space-bg.png";
@@ -31,6 +36,10 @@ const asteroidV2 = new Image(); asteroidV2.src = "assets/asteroid-medium-v2.png"
 const asteroidLargeImg = new Image(); asteroidLargeImg.src = "assets/asteroid-large.png";
 const briefingImage = new Image(); briefingImage.src = "assets/briefing-scene.png"; // story background
 const pauseButtonImg = new Image(); pauseButtonImg.src = "assets/pause-button.png";
+
+// Powerup images
+const powerupFireImg = new Image(); powerupFireImg.src = "assets/powerup-firerate.png";
+const powerupHealthImg = new Image(); powerupHealthImg.src = "assets/powerup-health.png";
 
 const asteroidDestroyFrames = [
   "assets/asteroid-medium-destroyed-s1.png",
@@ -66,9 +75,23 @@ const shipExplosionFrames = [
   "assets/ship-explode-s4.png"
 ].map(src => { const img = new Image(); img.src = src; return img; });
 
-// Powerup images
-const powerupFireImg = new Image(); powerupFireImg.src = "assets/powerup-firerate.png";
-const powerupHealthImg = new Image(); powerupHealthImg.src = "assets/powerup-health.png";
+
+const fadeOverlay = document.getElementById("fadeOverlay");
+function fadeToBlack(callback, duration = 600) {
+  fadeOverlay.classList.add("fade-in");
+  setTimeout(() => {
+    if (callback) callback();
+    // Only fade back after the next frame of the new scene has rendered
+    requestAnimationFrame(() => {
+      fadeFromBlack(duration);
+    });
+  }, duration);
+}
+
+function fadeFromBlack(duration = 600) {
+  fadeOverlay.classList.remove("fade-in");
+}
+
 
 // --- Game State ---
 let scrollX = 0;
@@ -79,20 +102,34 @@ let explosionTimer = 0;
 let explosionDone = false;
 let nextFireTime = 0;
 let animId = null;
+let score = 0;
+
 const HEALTH_BAR_HEIGHT = 40;
 const HEALTH_BAR_MARGIN = 8;
 const TOP_BOUNDARY = HEALTH_BAR_MARGIN + HEALTH_BAR_HEIGHT + 4;
 const PAUSE_BTN_SIZE = 40;  // Scaled size for drawing (matches health bar height; adjust as needed)
 const PAUSE_BTN_MARGIN = HEALTH_BAR_MARGIN;  // Reuse for consistency
 const pauseBtnZone = {
-  x: GAME_WIDTH - PAUSE_BTN_SIZE - PAUSE_BTN_MARGIN,
+  x: GAME_WIDTH - PAUSE_BTN_SIZE - PAUSE_BTN_MARGIN - 5,
   y: PAUSE_BTN_MARGIN,
   width: PAUSE_BTN_SIZE,
   height: PAUSE_BTN_SIZE
 };
 
+// --- HUD Layout positions ---
+const HUD_GAP = 2;  // space between health, score, and firerate
+const HB_WIDTH = 130;
+const FR_WIDTH = 130;
+
+// We'll compute center alignment dynamically
+const HUD_TOTAL_WIDTH = HB_WIDTH + FR_WIDTH + 100 /* score box */ + (HUD_GAP * 2);
+const HUD_START_X = (GAME_WIDTH - HUD_TOTAL_WIDTH) / 2;
+const HUD_Y = HEALTH_BAR_MARGIN;
+
+
+
 const ship = {
-  x: 60, y: GAME_HEIGHT / 2 - 16, width: 32, height: 32, speed: 2.5,
+  x: 60, y: GAME_HEIGHT / 2 - 16, width: 35, height: 35, speed: 2.5,
   movingUp: false, movingDown: false, firing: false, fireIntervalId: null,
   health: 2,
   fireRate: 1 // bullets per second, default 1, cap at 4
@@ -107,6 +144,217 @@ let gameAudioElements = [];
 let totalPausedTime = 0;
 let pauseStartTime = null;
 let inputsSetup = false; // to avoid attaching duplicate input handlers
+
+
+// --- Game Audio ---
+const musicTracks = {
+  menu: new Audio("assets/main-menu-music.mp3"),
+  story: new Audio("assets/story-game-music.mp3"),
+  main: new Audio("assets/main-game-music.mp3"),
+  end: new Audio("assets/end-game-music.mp3")  
+};
+
+// SFX
+const sfx = {
+  shipExplosion: new Audio("assets/ship-explosion-sfx.mp3"),
+  shipBullet: new Audio("assets/ship-bullet-sfx.mp3"),
+  asteroidMediumDestruction: new Audio("assets/asteroid-medium-destruction-sfx.mp3"),
+  asteroidLargeDestruction: new Audio("assets/asteroid-large-destruction-sfx.mp3"),
+  powerupCollect: new Audio("assets/metal-crate-sfx.mp3")
+};
+
+// Button UI SFX
+const uiSfx = {
+  hover: new Audio("assets/mouse-hover-sfx.mp3"),
+  click: new Audio("assets/mouse-click-sfx.mp3")
+};
+uiSfx.hover.volume = 0.7;
+uiSfx.click.volume = 0.7;
+
+sfx.shipExplosion.volume = 1.0;
+sfx.shipBullet.volume = 1.0;
+sfx.asteroidMediumDestruction.volume = 1.0;
+sfx.asteroidLargeDestruction.volume = 1.0;
+
+// Make all tracks loop and prepare for pause/resume control
+for (const key in musicTracks) {
+    const track = musicTracks[key];
+    track.loop = true;
+    track.volume = 1.0; // default full volume
+    gameAudioElements.push(track); // existing pause/resume system uses this
+  }
+
+let currentMusic = null;
+
+function getValidVolume(key, defaultVol = 1.0) {
+  const saved = localStorage.getItem(key);
+  const parsed = parseFloat(saved);
+  if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+    localStorage.setItem(key, defaultVol); // Auto-heal corrupted data
+    return defaultVol;
+  }
+  return parsed;
+}
+
+function playMusic(type) {
+  const newTrack = musicTracks[type];
+  if (!newTrack) return;
+
+  const savedVol = getSavedVolume("music");
+  const savedMute = localStorage.getItem("musicMuted") === "true";
+
+  // Fade out old track if switching
+  if (currentMusic && currentMusic !== newTrack) {
+    fadeOut(currentMusic, 800);
+  }
+
+  // Always reset to beginning
+  newTrack.currentTime = 0;
+  newTrack.volume = savedVol;
+  newTrack.muted = savedMute;
+
+  // Play with fade-in
+  if (!savedMute && savedVol > 0) {
+    setTimeout(() => {
+      fadeIn(newTrack, 1000);
+    }, currentMusic && currentMusic !== newTrack ? 100 : 0);
+  }
+
+  currentMusic = newTrack;
+}
+
+function playSfx(sound, isUi = false) {
+  if (!sound) return;
+
+  const savedVol = getValidVolume("sfxVolume", 1.0);
+  const savedMute = localStorage.getItem("sfxMuted") === "true";
+
+  if (savedMute || savedVol <= 0) return;
+
+  const clone = sound.cloneNode();
+  clone.volume = savedVol;
+  clone.play().catch(() => {}); // Prevent unhandled promise rejection (e.g., autoplay policy)
+}
+
+
+
+// Smooth fade-out over duration (ms)
+function fadeOut(audio, duration = 1000) {
+  if (!audio || audio.paused) return;
+  const step = 50; // ms between volume changes
+  const steps = duration / step;
+  const delta = audio.volume / steps;
+  const fade = setInterval(() => {
+    if (audio.volume - delta > 0) {
+      audio.volume -= delta;
+    } else {
+      audio.volume = 0;
+      audio.pause();
+      clearInterval(fade);
+    }
+  }, step);
+}
+
+// Smooth fade-in over duration (ms)
+function fadeIn(audio, duration = 1000) {
+  const savedVol = parseFloat(localStorage.getItem("musicVolume")) ?? 1.0;
+  const savedMute = localStorage.getItem("musicMuted") === "true";
+
+  if (savedVol <= 0 || savedMute) {
+    audio.pause();
+    audio.volume = 0;
+    return;
+  }
+
+  audio.volume = 0;
+  audio.muted = false;
+  audio.play().catch(() => {});
+
+  const targetVolume = savedVol;
+  const step = 50;
+  const steps = duration / step;
+  const delta = targetVolume / steps;
+
+  const fade = setInterval(() => {
+    if (audio.volume + delta < targetVolume) {
+      audio.volume += delta;
+    } else {
+      audio.volume = targetVolume;
+      clearInterval(fade);
+    }
+  }, step);
+}
+
+
+
+function getSavedVolume(type) {
+  if (type === "music") return parseFloat(localStorage.getItem("musicVolume")) ?? 1.0;
+  if (type === "sfx") return parseFloat(localStorage.getItem("sfxVolume")) ?? 1.0;
+  return 1.0;
+}
+
+// Switch between music tracks smoothly
+function playMusic(type) {
+  const newTrack = musicTracks[type];
+  if (!newTrack) return;
+
+  const savedVol = getSavedVolume("music");
+  const savedMute = localStorage.getItem("musicMuted") === "true";
+
+  // Always reset to start when switching tracks
+  if (currentMusic && currentMusic !== newTrack) {
+    fadeOut(currentMusic, 800);
+  }
+
+  // Reset time to 0 BEFORE playing
+  newTrack.currentTime = 0;
+  newTrack.volume = savedVol;
+  newTrack.muted = savedMute;
+
+  // Only play if not muted and volume > 0
+  if (!savedMute && savedVol > 0) {
+    // Use fadeIn for smooth transition
+    setTimeout(() => {
+      fadeIn(newTrack, 1000);
+    }, currentMusic && currentMusic !== newTrack ? 100 : 0);
+  }
+
+  currentMusic = newTrack;
+}
+
+// --- Global Audio Visibility Handler ---
+function setupGlobalAudioHandlers() {
+  // Pause audio on visibility change (tab hidden)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (currentMusic && !currentMusic.paused) {
+        stopAllAudio();  // Or just pause currentMusic if you want to target only music
+        console.log("⏸ Audio auto-paused (tab hidden)");
+      }
+    } else {
+      if (currentMusic && currentMusic.paused && !paused) {  // Added !paused check
+        resumeAllAudio();  // Or just resume currentMusic
+        console.log("▶️ Audio auto-resumed (tab visible)");
+      }
+    }
+  });
+
+  // Pause audio on window blur (e.g., Alt-Tab or switch app)
+  window.addEventListener("blur", () => {
+    if (currentMusic && !currentMusic.paused) {
+      stopAllAudio();
+      console.log("⏸ Audio auto-paused (window unfocused)");
+    }
+  });
+
+  // Resume on focus (optional, for symmetry with blur)
+  window.addEventListener("focus", () => {
+    if (currentMusic && currentMusic.paused && !paused) {  // Added !paused check
+      resumeAllAudio();
+      console.log("▶️ Audio auto-resumed (window focused)");
+    }
+  });
+}
 
 // Spawner/timer handles
 let asteroidSpawnTimeout = null;
@@ -131,15 +379,17 @@ const storySlides = [
   "altered the asteroids' trajectory from the asteroid belt.",
   "Drones were launched into space for a one-way mission to reduce their numbers.",
   "You're gonna be piloting one of them.",
-  "Intel reports some modules remnant from the mining operation was detected",
+  "Intel reports some module remnants from the mining operation were detected",
   "You can grab some of those to help you with your operation.",
   "Note that as you travel further...",
   "the number of asteroid encounter increases.",
   "Also, be careful of larger asteroids.",
   "They deal more damage to our drones than the regular ones.",
-  "The aim of this mission is solely to reduce their numbers!",
+  "Our drones are not equipped to clear them all.",
   "With that, the desctruction of drones are expected.",
-  "Just do your best. Destroy as many asteroids as you can!"
+  "The aim of this mission is solely to reduce their numbers.",
+  "Just do your best...",
+  "Shoot as many asteroids as you can!"
 ];
 
 // Story UI elements
@@ -163,12 +413,21 @@ function createStoryElements() {
   nextStoryBtn = document.getElementById("nextStoryBtn");
 
   nextStoryBtn.addEventListener("click", () => {
+    uiSfx.click.currentTime = 0;
+    playSfx(uiSfx.click, true);
     advanceStory();
   });
+
   skipStoryBtn.addEventListener("click", () => {
+    uiSfx.click.currentTime = 0;
+    playSfx(uiSfx.click, true);
     markStoryPlayedAndRevealReplay();
-    hideStoryScreen();
-    startGame();
+
+    // Smooth fade transition before starting main game
+    fadeToBlack(() => {
+      hideStoryScreen();
+      startGame();
+    });
   });
 }
 
@@ -191,6 +450,8 @@ function showStoryScreen(forceReplay = false) {
     skipStoryBtn.style.display = replayingStory ? "none" : "inline-block";
   }
   storyOverlay.style.display = "flex";
+  playMusic("story");
+
 }
 function hideStoryScreen() {
   if (storyOverlay) storyOverlay.style.display = "none";
@@ -212,17 +473,24 @@ function advanceStory() {
   if (currentSlideIndex < storySlides.length) {
     renderCurrentSlide();
   } else {
-    if (replayingStory) {
-      hideStoryScreen();
-      if (mainMenu) mainMenu.style.display = "flex";
-      replayingStory = false;
-      return;
-    }
+  if (replayingStory) {
+    fadeToBlack(() => {
+    hideStoryScreen();
+    if (mainMenu) mainMenu.style.display = "flex";
+    playMusic("menu");
+  });
+    replayingStory = false;
+    return;
+  }
     if (storyShownThisInstall) {
       markStoryPlayedAndRevealReplay();
     }
-    hideStoryScreen();
-    startGame();
+
+    // Fade cleanly to black before starting the main game
+    fadeToBlack(() => {
+      hideStoryScreen();
+      startGame();
+    });
   }
 }
 
@@ -248,15 +516,24 @@ function checkCollision(a, b) {
 // --- Orientation & resize ---
 function checkOrientation() {
   const isPortrait = window.innerHeight > window.innerWidth;
+
   rotatePrompt.style.visibility = (isPortrait && inGame) ? "visible" : "hidden";
   pauseModal.style.visibility = isPortrait ? "hidden" : "visible";
 
   if (isPortrait && inGame && !paused) {
+    // Going vertical mid-game → auto-pause
     togglePause(true);
   } else if (!isPortrait && paused && rotatePrompt.style.visibility === "hidden" && inGame) {
+    // Going back to horizontal → unpause
     togglePause(false);
+
+    // 🎵 Ensure correct music when resuming after vertical start
+    if (currentMusic !== musicTracks.main) {
+      playMusic("main");
+    }
   }
 }
+
 window.addEventListener("resize", checkOrientation);
 checkOrientation();
 
@@ -319,48 +596,84 @@ window.addEventListener("blur", () => {
 
 
 function stopAllAudio() {
-  gameAudioElements.forEach(a => { a.dataset.wasPlaying = !a.paused; a.pause(); });
+  gameAudioElements.forEach(a => { 
+    a.dataset.wasPlaying = !a.paused; 
+    a.pause(); 
+  });
 }
 
 function resumeAllAudio() {
-  gameAudioElements.forEach(a => { if (a.dataset.wasPlaying === "true") a.play(); });
+  const savedVol = getSavedVolume("music");
+  const savedMute = localStorage.getItem("musicMuted") === "true";
+
+  gameAudioElements.forEach(a => {
+    if (a.dataset.wasPlaying === "true") {
+      // Restore saved volume & mute BEFORE playing
+      a.volume = savedVol;
+      a.muted = savedMute;
+      a.play().catch(() => {});
+    }
+  });
 }
 
-exitBtn.addEventListener("click", exitToMainMenu);
+exitBtn.addEventListener("click", () => {
+  fadeToBlack(() => {
+    pauseModal.style.display = "none";
+    exitToMainMenu();
+  }, 600);
+});
+
 function exitToMainMenu() {
+  // Do NOT call fadeToBlack here — let caller control fade
   if (animId) cancelAnimationFrame(animId);
   animId = null;
   clearAllSpawners();
+
   paused = false;
   inGame = false;
   gameOver = false;
   shipExploding = false;
   explosionDone = false;
+
   bullets = [];
   asteroids = [];
   powerUps = [];
+
   ship.health = 2;
   ship.x = 60;
   ship.y = GAME_HEIGHT / 2 - 16;
+
   pauseModal.style.display = "none";
+  missionEndModal.style.display = "none"; // Ensure hidden
+
   if (mainMenu) mainMenu.style.display = "flex";
   stopAllAudio();
-  if (pauseStartTime !== null) {
-    totalPausedTime += Date.now() - pauseStartTime;
-    pauseStartTime = null;
-  }
+  playMusic("menu");
 }
 
 resumeBtn.addEventListener("click", () => togglePause(false));
+// --- Click SFX for pause & mission end buttons (no hover) ---
+[resumeBtn, exitBtn, playAgainBtn, exitMissionBtn].forEach(btn => {
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    uiSfx.click.currentTime = 0;
+    playSfx(uiSfx.click, true);
+  });
+});
 
 // --- Mission End Buttons ---
 playAgainBtn.addEventListener("click", () => {
-  missionEndModal.style.display = "none";
-  startGame();
+
+  fadeToBlack(() => {
+    missionEndModal.style.display = "none";
+    startGame();
+  });
 });
 exitMissionBtn.addEventListener("click", () => {
-  missionEndModal.style.display = "none";
-  exitToMainMenu();
+
+  fadeToBlack(() => {
+    exitToMainMenu(); // Now safe: no double fade, no flash of game
+  }, 600);
 });
 
 // --- Input ---
@@ -439,6 +752,8 @@ function setupInput() {
     // Check if click is on pause button
     if (x >= pauseBtnZone.x && x <= pauseBtnZone.x + pauseBtnZone.width &&
         y >= pauseBtnZone.y && y <= pauseBtnZone.y + pauseBtnZone.height) {
+      uiSfx.click.currentTime = 0;
+      playSfx(uiSfx.click, true);
       togglePause(true);  // Pause the game
     }
   });
@@ -475,6 +790,7 @@ function fireBullet() {
   const now = Date.now();
   if (now < nextFireTime) return;
   bullets.push({ x: ship.x + ship.width - 4, y: ship.y + ship.height / 2 - 2, width: 8, height: 4, speed: 6 });
+  playSfx(sfx.shipBullet);
   nextFireTime = now + 1000 / ship.fireRate;
 }
 
@@ -576,8 +892,8 @@ function spawnPowerUp(type) {
   const pu = {
     x: GAME_WIDTH + 20,
     y: TOP_BOUNDARY + 20 + Math.random() * (GAME_HEIGHT - TOP_BOUNDARY - 60),
-    width: 20,
-    height: 20,
+    width: 25,
+    height: 25,
     type,
     collected: false,
     vx: -1.6 // drift left
@@ -607,7 +923,29 @@ function update() {
         setTimeout(() => {
           missionEndModal.style.display = "flex";
           missionEndModal.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500 });
+
+          // --- Score + High Score Display ---
+          const previousHigh = parseInt(localStorage.getItem("highScore") || "0", 10);
+          const newHigh = Math.max(score, previousHigh);
+
+          finalScoreText.textContent = `SCORE: ${score}`;
+
+          if (score > previousHigh) {
+            // New record
+            newHighScoreMsg.textContent = "CONGRATS! NEW HIGH SCORE!";
+            highScoreText.textContent = `HIGH SCORE: ${score}`;
+            localStorage.setItem("highScore", score);
+          } else if (previousHigh > 0) {
+            // Existing high score only
+            newHighScoreMsg.textContent = "";
+            highScoreText.textContent = `HIGH SCORE: ${previousHigh}`;
+          } else {
+            // First game ever — no high score yet
+            newHighScoreMsg.textContent = "";
+            highScoreText.textContent = "";
+          }
         }, 300);
+
       }
     }
     return;
@@ -645,8 +983,12 @@ function update() {
         bullets.splice(bi, 1);
         if (a.hitCount <= 0) {
           a.destroyed = true;
+          const destructionSfx = a.large ? sfx.asteroidLargeDestruction : sfx.asteroidMediumDestruction;
+          playSfx(destructionSfx);
           a.frameIndex = 0;
           a.frameTimer = 0;
+          score += a.large ? 30 : 10; // larger asteroids give higher score
+
         }
       }
     });
@@ -654,6 +996,8 @@ function update() {
     // ship collision
     if (!a.destroyed && checkCollision(a, ship)) {
       a.destroyed = true;
+      const destructionSfx = a.large ? sfx.asteroidLargeDestruction : sfx.asteroidMediumDestruction;
+      playSfx(destructionSfx);
       a.frameIndex = 0;
       a.frameTimer = 0;
       const dmg = a.damage || 1;
@@ -683,14 +1027,17 @@ function update() {
 }
 
 function triggerShipExplosion() {
+  playSfx(sfx.shipExplosion);
   stopFiring();
   shipExploding = true;
   explosionFrame = 0;
   explosionTimer = 0;
   gameOver = true;
+  //space for audio end at end game
   if (animId) cancelAnimationFrame(animId);
   animId = null;
   clearAllSpawners();
+  playMusic("end");
 }
 
 // --- Collect powerup ---
@@ -704,6 +1051,7 @@ function collectPowerUp(p) {
   } else if (p.type === "health") {
     ship.health = Math.min(ship.health + 1, HEALTH_CAP);
   }
+  playSfx(sfx.powerupCollect); // play metal-crate sound
   p.collected = true;
   // small visual removal: filter later in update/draw
 }
@@ -715,7 +1063,7 @@ function draw() {
 
   if (shipExploding) {
     const frame = shipExplosionFrames[explosionFrame];
-    if (frame) ctx.drawImage(frame, ship.x - 8, ship.y - 8, ship.width + 16, ship.height + 16);
+    if (frame) ctx.drawImage(frame, ship.x - 0, ship.y - 0, ship.width + 8, ship.height + 8);
   } else if (!explosionDone) {
     ctx.drawImage(shipImage, ship.x, ship.y, ship.width, ship.height);
   }
@@ -745,26 +1093,31 @@ function draw() {
     ctx.drawImage(img, p.x, p.y, p.width, p.height);
   });
 
-  // draw health bar
+  // --- Centered HUD Layout ---
   const hbIndex = Math.max(0, Math.min(healthBars.length - 1, ship.health));
   const hb = healthBars[hbIndex];
-  const hbWidth = 135;
-  ctx.drawImage(hb, HEALTH_BAR_MARGIN, HEALTH_BAR_MARGIN, hbWidth, HEALTH_BAR_HEIGHT);
-
-  // draw firerate bar (right of health bar)
-  const FR_GAP = 10; // small gap between bars
   const frIndex = Math.max(1, Math.min(firerateBars.length, ship.fireRate)) - 1;
   const frImg = firerateBars[frIndex];
-  const frWidth = 130;
-  ctx.drawImage(
-    frImg,
-    HEALTH_BAR_MARGIN + hbWidth + FR_GAP,
-    HEALTH_BAR_MARGIN,
-    frWidth,
-    HEALTH_BAR_HEIGHT
-  );
 
-  // NEW: Draw pause button (only during active gameplay)
+  let x = HUD_START_X;
+
+  // Health Bar
+  ctx.drawImage(hb, x, HUD_Y, HB_WIDTH, HEALTH_BAR_HEIGHT);
+  x += HB_WIDTH + HUD_GAP;
+
+  // Score (center text block between bars)
+  ctx.font = "14px monospace";
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  const scoreCenterX = x + 50; // middle of score box (100px wide)
+  ctx.fillText("SCORE", scoreCenterX, HUD_Y + 14);
+  ctx.fillText(score, scoreCenterX, HUD_Y + 30);
+  x += 100 + HUD_GAP;
+
+  // Firerate Bar
+  ctx.drawImage(frImg, x, HUD_Y, FR_WIDTH, HEALTH_BAR_HEIGHT);
+
+  // Pause button stays top-right
   ctx.drawImage(pauseButtonImg, pauseBtnZone.x, pauseBtnZone.y, pauseBtnZone.width, pauseBtnZone.height);
 
 }
@@ -779,29 +1132,29 @@ function loop() {
 
 // --- Splash & Menu ---
 function showSplashThenMenu() {
-  const splashSeen = localStorage.getItem("splashSeen");
-  if (splashSeen) {
-    splashScreen.style.display = "none";
-    mainMenu.style.display = "flex";
-    return;
-  }
   splashScreen.style.display = "flex";
   mainMenu.style.display = "none";
-  setTimeout(() => {
-    splashScreen.classList.add("fadeOut");
-    setTimeout(() => {
-      splashScreen.style.display = "none";
-      splashScreen.classList.remove("fadeOut");
-      mainMenu.style.display = "flex";
-      localStorage.setItem("splashSeen", "true");
-    }, 500);
-  }, 2500);
+
+  const startBtn = document.getElementById("startBtn");
+  if (startBtn) {
+    startBtn.onclick = () => {
+      splashScreen.classList.add("fadeOut");
+      setTimeout(() => {
+        splashScreen.style.display = "none";
+        splashScreen.classList.remove("fadeOut");
+        mainMenu.style.display = "flex";
+        playMusic("menu");
+      }, 500);
+    };
+  }
 }
 
 // --- Start Game ---
 function startGame() {
   clearAllSpawners();
+  ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT); // <— add this line
 
+  
   scrollX = 0;
   bullets = [];
   asteroids = [];
@@ -812,6 +1165,7 @@ function startGame() {
   explosionDone = false;
   explosionFrame = 0;
   explosionTimer = 0;
+  score = 0;
 
   ship.x = 60;
   ship.y = GAME_HEIGHT / 2 - 16;
@@ -822,29 +1176,39 @@ function startGame() {
   ship.fireRate = 1;
   nextFireTime = 0;
 
+  finalScoreText.textContent = "";
+  newHighScoreMsg.textContent = "";
+  highScoreText.textContent = "";
+
+  // *** ONLY THIS — everything else in callback ***
+  fadeToBlack(() => {
+    if (mainMenu) mainMenu.style.display = "none";
+    missionEndModal.style.display = "none";
+    pauseModal.style.display = "none";
+
+    inGame = true;
+    setupInput();
+    gameStartTime = Date.now();
+    totalPausedTime = 0;
+    pauseStartTime = null;
+    scheduleNextAsteroid();
+    scheduleNextPowerUp();
+
+    // Check orientation FIRST before starting music or loop
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if (isPortrait) {
+      togglePause(true);      // Pause immediately
+      rotatePrompt.style.visibility = "visible";
+    } else {
+      playMusic("main");      // Only play if landscape
+      rotatePrompt.style.visibility = "hidden";
+    }
+
+    if (animId) cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(loop);
+  });
 
 
-  if (mainMenu) mainMenu.style.display = "none";
-  missionEndModal.style.display = "none";
-  pauseModal.style.display = "none";
-
-  inGame = true;
-
-  setupInput();
-
-  gameStartTime = Date.now();
-
-  totalPausedTime = 0;
-  pauseStartTime = null;
-
-  // schedule first asteroid & powerup spawns
-  scheduleNextAsteroid();
-  scheduleNextPowerUp();
-
-  if (animId) cancelAnimationFrame(animId);
-  animId = requestAnimationFrame(loop);
-
-  checkOrientation();
 }
 
 // --- Menu button wiring ---
@@ -852,33 +1216,306 @@ function setupMenuButtons() {
   playBtn.removeEventListener("click", startGame);
   playBtn.addEventListener("click", () => {
     const played = localStorage.getItem("storyPlayed");
+
     if (!played) {
-      showStoryScreen(false);
+      // Smooth fade from main menu into the story scene
+      fadeToBlack(() => {
+        showStoryScreen(false);
+      });
     } else {
       startGame();
     }
   });
 
-  settingsBtn.addEventListener("click", () => alert("Settings placeholder"));
-  guideBtn.addEventListener("click", () => alert("Guide placeholder"));
 
-  const replayStoryBtn = document.getElementById("replayStoryBtn");
-  replayStoryBtn.addEventListener("click", () => {
-    showStoryScreen(true);
+  // --- SETTINGS MENU LOGIC ---
+const settingsMenu = document.getElementById("settingsMenu");
+const backBtn = document.getElementById("backBtn");
+const resetBtn = document.getElementById("resetBtn");
+const musicSlider = document.getElementById("musicSlider");
+const sfxSlider = document.getElementById("sfxSlider");
+const musicMute = document.getElementById("musicMute");
+const sfxMute = document.getElementById("sfxMute");
+
+/// === INITIALIZE AUDIO SETTINGS ONCE AT STARTUP ===
+{
+  const savedMusicVol = getValidVolume("musicVolume", 1.0);
+  const savedSfxVol = getValidVolume("sfxVolume", 1.0);
+  const savedMusicMute = localStorage.getItem("musicMuted") === "true";
+  const savedSfxMute = localStorage.getItem("sfxMuted") === "true";
+
+  // Apply safely
+  for (const key in musicTracks) {
+    musicTracks[key].volume = savedMusicVol;
+    musicTracks[key].muted = savedMusicMute;
+  }
+  for (const key in sfx) {
+    sfx[key].volume = savedSfxVol;
+    sfx[key].muted = savedSfxMute;
+  }
+  for (const key in uiSfx) {
+    uiSfx[key].volume = savedSfxVol * 0.7;
+    uiSfx[key].muted = savedSfxMute;
+  }
+
+  // Sync UI
+  if (musicSlider) musicSlider.value = savedMusicVol * 100;
+  if (sfxSlider) sfxSlider.value = savedSfxVol * 100;
+  if (musicMute) musicMute.checked = savedMusicMute;
+  if (sfxMute) sfxMute.checked = savedSfxMute;
+}
+
+// --- Open Settings ---
+settingsBtn.addEventListener("click", () => {
+
+  mainMenu.style.display = "none";
+  settingsMenu.style.display = "flex";
+
+  // Always use SAVED values for consistency (ignore fade-in/out changes)
+  const savedMusicVol = getValidVolume("musicVolume", 1.0);
+  const savedSfxVol = getValidVolume("sfxVolume", 1.0);
+  const savedMusicMute = localStorage.getItem("musicMuted") === "true";
+  const savedSfxMute = localStorage.getItem("sfxMuted") === "true";
+
+  musicSlider.value = savedMusicVol * 100;
+  sfxSlider.value = savedSfxVol * 100;
+  musicMute.checked = savedMusicMute;
+  sfxMute.checked = savedSfxMute;
+});
+
+// --- Back button ---
+backBtn.addEventListener("click", () => {
+  uiSfx.click.currentTime = 0;
+  playSfx(uiSfx.click, true);
+  settingsMenu.style.display = "none";
+  mainMenu.style.display = "flex";
+});
+
+// --- Reset button ---
+// --- Reset button (FULL GAME RESET + CONFIRMATION) ---
+resetBtn.addEventListener("click", () => {
+  // Play UI click sound first (still works even if user cancels)
+  uiSfx.click.currentTime = 0;
+  playSfx(uiSfx.click, true);
+
+  // ---- CONFIRMATION DIALOG ----
+  const userConfirmed = confirm(
+    "You are about to reset the local save of the game.\n\n" +
+    "Continue?"
+  );
+
+  // If user clicks Cancel → exit early
+  if (!userConfirmed) return;
+
+  // ==============================
+  // === ACTUAL RESET (only runs on OK) ===
+  // ==============================
+
+  const defaultVol = 1.0;
+  const defaultMute = false;
+
+  // ---- Reset audio objects ----
+  for (const key in musicTracks) {
+    musicTracks[key].volume = defaultVol;
+    musicTracks[key].muted = defaultMute;
+  }
+  for (const key in sfx) {
+    sfx[key].volume = defaultVol;
+    sfx[key].muted = defaultMute;
+  }
+  for (const key in uiSfx) {
+    uiSfx[key].volume = defaultVol * 0.7;
+    uiSfx[key].muted = defaultMute;
+  }
+
+  // ---- Clear game data from localStorage ----
+  localStorage.removeItem("highScore");      // or .setItem("highScore", "0")
+  localStorage.removeItem("storyPlayed");    // hides REPLAY STORY button
+
+  // ---- Save clean audio defaults ----
+  localStorage.setItem("musicVolume", defaultVol);
+  localStorage.setItem("sfxVolume",   defaultVol);
+  localStorage.setItem("musicMuted",  defaultMute);
+  localStorage.setItem("sfxMuted",    defaultMute);
+
+  // ---- Update UI immediately ----
+  if (musicSlider) musicSlider.value = defaultVol * 100;
+  if (sfxSlider)   sfxSlider.value   = defaultVol * 100;
+  if (musicMute)   musicMute.checked = defaultMute;
+  if (sfxMute)     sfxMute.checked   = defaultMute;
+
+  // Hide replay button (makes menu look like first launch)
+  const replayBtn = document.getElementById("replayStoryBtn");
+  if (replayBtn) replayBtn.style.display = "none";
+
+  // ---- Final success message ----
+  alert("All game data and audio settings have been reset!");
+});
+
+// === LIVE AUDIO CONTROL ===
+
+// MUSIC SLIDER
+musicSlider.addEventListener("input", () => {
+  const rawValue = parseFloat(musicSlider.value) / 100 || 0;
+  const value = Math.min(1, Math.max(0, isNaN(rawValue) ? 1 : rawValue));
+
+  for (const key in musicTracks) {
+    musicTracks[key].volume = value;
+  }
+  if (currentMusic) currentMusic.volume = value;
+
+  localStorage.setItem("musicVolume", value);
+});
+
+// SFX SLIDER
+sfxSlider.addEventListener("input", () => {
+  const rawValue = parseFloat(sfxSlider.value) / 100 || 0;
+  const value = Math.min(1, Math.max(0, isNaN(rawValue) ? 1 : rawValue));
+
+  localStorage.setItem("sfxVolume", value);
+
+  // APPLY TO ALL SFX IMMEDIATELY
+  for (const key in sfx) {
+    sfx[key].volume = value;
+  }
+  for (const key in uiSfx) {
+    uiSfx[key].volume = value * 0.7;
+  }
+});
+
+// MUSIC MUTE
+musicMute.addEventListener("change", () => {
+  const muted = musicMute.checked;
+  for (const key in musicTracks) musicTracks[key].muted = muted;
+  if (currentMusic) currentMusic.muted = muted;
+  localStorage.setItem("musicMuted", muted);
+});
+
+
+
+// SFX MUTE
+sfxMute.addEventListener("change", () => {
+  const muted = sfxMute.checked;
+  for (const key in sfx) sfx[key].muted = muted;
+  for (const key in uiSfx) uiSfx[key].muted = muted;
+  localStorage.setItem("sfxMuted", muted);
+});
+
+// --- Guide menu wiring & behavior ---
+function showGuideMenu() {
+  const guideMenu = document.getElementById("guideMenu");
+  if (!guideMenu) return;
+
+  // Play UI click sound once
+  uiSfx.click.currentTime = 0;
+  playSfx(uiSfx.click, true);
+
+  // Hide other menus
+  if (mainMenu) mainMenu.style.display = "none";
+  if (settingsMenu) settingsMenu.style.display = "none";
+
+  // Hide the canvas to prevent last frame background issue
+  if (canvas) canvas.style.display = "none";
+
+  guideMenu.style.display = "flex";
+
+  // Pause game if currently playing
+  if (inGame && !paused) {
+    togglePause(true);
+  }
+}
+
+function hideGuideMenu() {
+  const guideMenu = document.getElementById("guideMenu");
+  if (!guideMenu) return;
+
+  uiSfx.click.currentTime = 0;
+  playSfx(uiSfx.click, true);
+
+  guideMenu.style.display = "none";
+
+  // Restore the canvas visibility when exiting the guide
+  if (canvas) canvas.style.display = "block";
+
+  // Return to main menu
+  if (mainMenu) mainMenu.style.display = "flex";
+}
+
+// Clean setup — ensure no duplicate listeners
+const guideBtn = document.getElementById("guideBtn");
+if (guideBtn) {
+  guideBtn.replaceWith(guideBtn.cloneNode(true)); // remove any previous listeners safely
+  const newGuideBtn = document.getElementById("guideBtn");
+  newGuideBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    showGuideMenu();
   });
+}
 
-  const container = document.querySelector(".main-menu-button-container");
-  if (container) {
-    const lastBtn = container.querySelector("button:last-child");
-    if (lastBtn && replayStoryBtn !== lastBtn) {
-      lastBtn.insertAdjacentElement("afterend", replayStoryBtn);
+// Close button inside/outside guide
+const guideCloseBtn = document.getElementById("guideCloseBtn");
+if (guideCloseBtn) {
+  guideCloseBtn.replaceWith(guideCloseBtn.cloneNode(true));
+  const newGuideCloseBtn = document.getElementById("guideCloseBtn");
+  newGuideCloseBtn.addEventListener("click", () => {
+    hideGuideMenu();
+  });
+}
+
+// Optional: clicking outside the card closes the guide
+const guideModal = document.getElementById("guideMenu");
+if (guideModal) {
+  guideModal.addEventListener("click", (ev) => {
+    if (ev.target === guideModal) {
+      hideGuideMenu();
     }
-  }
+  });
+}
 
-  if (localStorage.getItem("storyPlayed")) {
-    const r = document.getElementById("replayStoryBtn");
-    if (r) r.style.display = "block";
+
+
+// --- Replay Story Button ---
+const replayStoryBtn = document.getElementById("replayStoryBtn");
+replayStoryBtn.addEventListener("click", () => {
+  fadeToBlack(() => showStoryScreen(true));
+});
+
+// --- Inject Replay Story Button into Menu if needed ---
+const container = document.querySelector(".main-menu-button-container");
+if (container) {
+  const lastBtn = container.querySelector("button:last-child");
+  if (lastBtn && replayStoryBtn !== lastBtn) {
+    lastBtn.insertAdjacentElement("afterend", replayStoryBtn);
   }
+}
+
+if (localStorage.getItem("storyPlayed")) {
+  const r = document.getElementById("replayStoryBtn");
+  if (r) r.style.display = "block";
+}
+
+// --- Hover & Click SFX for Menu Buttons ---
+const uiButtons = [
+  document.getElementById("startBtn"),
+  playBtn,
+  guideBtn,
+  settingsBtn,
+  document.getElementById("replayStoryBtn")
+];
+
+uiButtons.forEach(btn => {
+  if (!btn) return;
+  btn.addEventListener("mouseenter", () => {
+    uiSfx.hover.currentTime = 0;
+    playSfx(uiSfx.hover, true);
+  });
+  btn.addEventListener("click", () => {
+    uiSfx.click.currentTime = 0;
+    playSfx(uiSfx.click, true);
+  });
+});
+
+
 }
 setupMenuButtons();
 
@@ -907,3 +1544,5 @@ allImages.forEach(img => {
     }, 20);
   }
 });
+
+setupGlobalAudioHandlers();

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shoot The Asteroid</title>
+  <link rel="icon" type="image/png" href="assets/main-logo.png" /> 
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -16,17 +17,126 @@
   <!-- Splash Intro -->
   <div id="splashScreen">
     <img id="gameTitle" src="assets/game-title.png" alt="Game Title">
+    <button id="startBtn">START</button>
   </div>
 
   <!-- Main Menu -->
   <div id="mainMenu">
     <img id="mainMenuGameTitle" src="assets/game-title.png" alt="Game Title">
-    <p>*Development on hold....*</p>
     <div class="main-menu-button-container">
       <button id="playBtn">PLAY</button>
-      <button id="guideBtn">GUIDE</button>
       <button id="settingsBtn">SETTINGS</button>
+      <button id="guideBtn">GUIDE</button>
       <button id="replayStoryBtn">REPLAY STORY</button>
+    </div>
+  </div>
+
+  <!-- Settings Menu -->
+  <div id="settingsMenu">
+    <h2>SETTINGS</h2>
+
+    <div class="settings-control">
+      <label>Music:</label>
+      <input type="range" id="musicSlider" min="0" max="100" value="100">
+      <label>Mute</label>
+      <input type="checkbox" id="musicMute">
+    </div>
+
+    <div class="settings-control">
+      <label>SFX:</label>
+      <input type="range" id="sfxSlider" min="0" max="100" value="100">
+      <label>Mute</label>
+      <input type="checkbox" id="sfxMute">
+    </div>
+
+    <div class="settings-buttons column">
+      <button id="resetBtn">RESET</button>
+      <button id="backBtn">BACK</button>
+    </div>
+  </div>
+
+  <!-- GUIDE Menu -->
+  <div id="guideMenu" class="infoModal" style="display:none;">
+    <div class="infoCard">
+      <h2>GUIDE</h2>
+
+      <section class="guide-section">
+        <h3>About</h3>
+        <p>
+            This is a game development project under 
+  <strong>advanced</strong> category of my 
+  <a href="https://marcsnl.github.io/" target="_blank" rel="noopener noreferrer">archive</a>.
+  Majority of assets are outsourced with credit and their links below.
+        </p>
+      </section>
+
+      <section class="guide-section">
+        <h3>CONTROLS</h3>
+        <div class="controls-grid">
+          <div>
+            <strong>Desktop Users</strong>
+            <p>Move Up - W or ↑<br>Move Down - S or ↓<br>Fire - Space Bar</p>
+          </div>
+          <div>
+            <strong>Mobile Devices</strong>
+            <p>Movement and Firing - Touchscreen (direct touch & drag the ship)</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="guide-section">
+        <h3>CREDITS</h3>
+
+        <div class="credit-block">
+          <strong>GRAPHICS</strong>
+          <p></p>
+        </div>
+
+        <div class="credit-block">
+          <strong>UI AND BACKGROUND</strong>
+          <ul>
+            <li>Health Bar - Personal Asset</li>
+            <li>Fire Rate Bar - Personal Asset</li>
+            <li>Pause Button - Personal Asset</li>
+            <li>Space Background - Personal Asset</li>
+            <li>Game Title Design - <a href="https://www.gamergeeks.net/apps/pixel/letter-text-generator" target="_blank" rel="noopener noreferrer">Gamergeeks</a></li>
+          </ul>
+        </div>
+
+        <div class="credit-block">
+          <strong>OBJECTS AND SPRITES</strong>
+          <ul>
+            <li>Ship - <a href="https://ravenmore.itch.io/pixel-space-shooter-assets" target="_blank" rel="noopener noreferrer">Ravenmore</a></li>
+            <li>Asteroids - <a href="https://ravenmore.itch.io/pixel-space-shooter-assets" target="_blank" rel="noopener noreferrer">Ravenmore</a></li>
+            <li>Powerups - <a href="https://ravenmore.itch.io/pixel-space-shooter-assets" target="_blank" rel="noopener noreferrer">Ravenmore</a></li>
+            <li>Story Scene - General Character & Briefing Background generated via GPT-5 prompts</li>
+          </ul>
+        </div>
+
+        <div class="credit-block">
+          <strong>AUDIO</strong>
+          <p><em>MUSIC</em></p>
+          <ul>
+            <li>Main Menu Music - 8 Bit Beginning! | <a href="https://www.youtube.com/watch?v=ptlYSrZU_ZU" target="_blank" rel="noopener noreferrer">HeatleyBros</a></li>
+            <li>Story Scene Music - And Yet, We March | <a href="https://www.youtube.com/watch?v=P4NtyyDeMo0" target="_blank" rel="noopener noreferrer">HeatleyBros</a></li>
+            <li>Main Game Music - New Game Plus! | <a href="https://www.youtube.com/watch?v=PP_ydA31mZ8" target="_blank" rel="noopener noreferrer">HeatleyBros</a></li>
+            <li>Mission End Music - Dark Alley | <a href="https://www.youtube.com/watch?v=Qa1D5pibGnE" target="_blank" rel="noopener noreferrer">HeatleyBros</a></li>
+          </ul>
+
+          <p><em>SFX</em></p>
+          <ul>
+            <li><a href="https://www.youtube.com/watch?v=acvLOmMbXi0" target="_blank" rel="noopener noreferrer">Laser sfx</a></li>
+            <li><a href="https://www.youtube.com/watch?v=XsiCZCtYu_c" target="_blank" rel="noopener noreferrer">Asteroid crush sfx</a></li>
+            <li><a href="https://www.youtube.com/watch?v=z-rkXTgie0A" target="_blank" rel="noopener noreferrer">Ship explosion sfx</a></li>
+            <li><a href="https://www.youtube.com/watch?v=1TTSWWobIQE" target="_blank" rel="noopener noreferrer">Hover button sfx</a></li>
+            <li><a href="https://www.youtube.com/watch?v=i0DON3AjhW4" target="_blank" rel="noopener noreferrer">Mouse click sfx</a></li>
+            <li><a href="https://www.youtube.com/watch?v=EowbIZqRsss" target="_blank" rel="noopener noreferrer">Powerup sfx</a></li>
+          </ul>
+        </div>
+      </section>
+    </div>
+    <div class="infoCloseWrap">
+      <button id="guideCloseBtn">BACK</button>
     </div>
   </div>
 
@@ -57,15 +167,22 @@
   <!-- End Mission Modal -->
   <div id="missionEndModal">
     <h2>DRONE CONNECTION LOST</h2>
+
     <p>Connect to another drone?</p>
     <div class="mission-end-modal-actions">
       <button id="playAgainBtn">PLAY AGAIN</button>
       <button id="exitMissionBtn">EXIT</button>
     </div>
+
+    <!-- Score section -->
+    <p id="finalScoreText" style="margin-top: 10px; font-weight: bold;"></p>
+    <p id="highScoreText" style="margin-bottom: 10px; opacity: 0.8;"></p>
+    <p id="newHighScoreMsg" style="color: #ffd700; font-weight: bold;"></p>
+
   </div>
+
+  <div id="fadeOverlay"></div>
 
   <script src="script.js"></script>
 </body>
 </html>
-
-

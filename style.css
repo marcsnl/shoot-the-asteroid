@@ -47,17 +47,36 @@ html, body {
   visibility: hidden;
 }
 
+/* -------- Screen Fade Transition -------- */
+#fadeOverlay {
+  position: fixed;
+  inset: 0;
+  background: black;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+  z-index: 99999; /* above everything */
+}
+
+#fadeOverlay.fade-in {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+
 /* ------- Splash Screen -------- */
 #splashScreen {
   position: fixed;
   inset: 0;
-  display: none; /* Add this line */
+  display: none; /* hidden until shown */
+  flex-direction: column; /* 👈 Stack image and button vertically */
   align-items: center;
   justify-content: center;
   background: black;
   z-index: 100;
   transition: opacity 0.5s;
 }
+
 #splashScreen.fadeOut {
   opacity: 0;
   pointer-events: none;
@@ -69,7 +88,26 @@ html, body {
   height: auto;
 }
 
-/* -------- Main Menu -------- */
+#splashScreen button {
+  background: #272B2F;
+  border: 1px solid #808080;
+  width: 150px;
+  height: 50px;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+  margin-top: 20px;
+}
+
+#splashScreen button:hover{
+  background: #1D2124
+}
+
+
+/* -------- Main Menu Background Drift -------- */
 #mainMenu {
   position: fixed;
   inset: 0;
@@ -77,10 +115,25 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: black;
+  background: url("assets/space-bg.png") repeat-x black;
+  background-size: cover;
   z-index: 100;
   gap: 10px;
+
+  /* Animation setup */
+  animation: driftBackground 60s linear infinite;
 }
+
+/* Keyframes for slow horizontal drift */
+@keyframes driftBackground {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -1000px 0;
+  }
+}
+
 
 #mainMenuGameTitle {
   display: block;
@@ -90,13 +143,9 @@ html, body {
   margin-bottom: 24px;     
 }
 
-#mainMenu p{
-  color: white;
-}
-
 #mainMenu button {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.9);
+  background: #272B2F;
+  border: 1px solid #808080;
   width: 150px;
   height: 50px;
   color: white;
@@ -105,6 +154,10 @@ html, body {
   cursor: pointer;
   font-family: monospace;
   font-size: 13px;
+}
+
+#mainMenu button:hover{
+  background: #1D2124
 }
 
 .main-menu-button-container {
@@ -120,6 +173,217 @@ html, body {
   display: none;
 }
 
+/* -------- Guide Modal (shorter, scrollable, external close button) -------- */
+.infoModal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column; /* stack card + button vertically */
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  background-color: rgba(0, 0, 0, 0.75);
+  font-family: monospace;
+  color: #fff;
+  padding: 24px 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.infoCard {
+  width: 92%;
+  max-width: 840px;
+  background: linear-gradient(180deg, rgba(6,10,18,0.95), rgba(10,12,20,0.92));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 18px;
+  border-radius: 10px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  max-height: 65vh; /* shorter height */
+  overflow-y: auto;
+  scrollbar-width: thin;
+  margin-bottom: 18px; /* 👈 adds space between box and close button */
+}
+
+/* Custom scrollbar */
+.infoCard::-webkit-scrollbar {
+  width: 6px;
+}
+.infoCard::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+.infoCard::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.infoCard h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
+.infoCard h3 {
+  margin: 12px 0 6px 0;
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+.guide-section {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* --- Controls layout: single centered column --- */
+.controls-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --- Credits layout: centered --- */
+.credit-block {
+  margin: 10px 0;
+  text-align: center;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.credit-block ul {
+  list-style-position: inside;
+  margin: 6px 0 0 0;
+  padding: 0;
+  text-align: center;
+}
+
+.credit-block li {
+  display: block;
+  margin: 2px 0;
+}
+
+/* --- External close button (below the box) --- */
+.infoCloseWrap {
+  margin-top: 8px;
+  text-align: center;
+}
+
+#guideCloseBtn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+#guideCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* --- Consistent link color for guide --- */
+#guideMenu a,
+#guideMenu a:visited,
+#guideMenu a:hover,
+#guideMenu a:active {
+  color: #4da6ff;           /* bright blue tone */
+  text-decoration: none;    /* remove underline for cleaner look */
+  transition: color 0.15s ease;
+}
+
+#guideMenu a:hover {
+  color: #7fc4ff;           /* lighter blue on hover */
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+  .infoCard {
+    padding: 12px;
+    max-height: 70vh;
+    margin-bottom: 16px;
+  }
+  .infoCard h2 { font-size: 18px; }
+}
+
+
+/* -------- Settings Menu -------- */
+#settingsMenu {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: black;
+  color: white;
+  font-family: monospace;
+  z-index: 100;
+  gap: 15px;
+}
+
+#settingsMenu h2 {
+  margin-bottom: 10px;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+.settings-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Make the first label (Music/SFX) same width so sliders align */
+.settings-control label:first-of-type {
+  display: inline-block;
+  width: 60px; /* adjust as needed for perfect alignment */
+  text-align: right;
+}
+
+/* Optional: small spacing tweak for aesthetics */
+.settings-control label:nth-of-type(2) {
+  margin-left: 5px;
+}
+
+.settings-control label {
+  font-size: 14px;
+}
+
+.settings-buttons.column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  align-items: center;
+}
+
+#settingsMenu button {
+  background: #272B2F;
+  border: 1px solid #808080;
+  width: 120px;
+  height: 40px;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+#settingsMenu button:hover {
+  background: #1D2124;
+}
+
+input[type="range"] {
+  width: 120px;
+}
+
+
 /* -------- Story Overlay -------- */
 #storyOverlay {
   position: fixed;
@@ -128,7 +392,7 @@ html, body {
   justify-content: center;
   align-items: center;
   z-index: 9999;
-  background-color: rgba(0,0,0,0.5);
+  background-color: rgba(0,0,0,0.1);
   touch-action: manipulation;
 }
 
@@ -152,7 +416,7 @@ html, body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: brightness(0.55);
+  filter: brightness(0.70);
   transform-origin: center;
 }
 
@@ -294,6 +558,5 @@ html, body {
     transform: none;
     border-radius: 8px;
   }
-
 
 }
