@@ -1551,7 +1551,7 @@ if (localStorage.getItem("storyPlayed")) {
 const uiButtons = [
   document.getElementById("startBtn"),
   playBtn,
-  guideBtn.getElementById("guideBtn"),
+  document.getElementById("guideBtn"),
   settingsBtn,
   document.getElementById("replayStoryBtn")
 ];
